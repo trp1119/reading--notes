@@ -1,8 +1,9 @@
 /**
- * 5.7 代理数组
- * 5.7.3 数组的查找方法
- * 同样方法处理 indexOf 和 lastIndexOf
+ * 6.2 响应丢失问题
+ * 响应式数据键多，一个一个转换玛法，封装 toRefs
  */
+
+/*********************旧代码开始**********************/
 
 const TriggerType = {
   SET: 'SET',
@@ -45,7 +46,7 @@ const ITERATE_KEY = Symbol()
 
 
 const arrayInstrumentations = {}
-
+let shouldTrack = true
 ;['includes', 'indexOf', 'lastIndexOf'].forEach(method => {
   const originMethod = Array.prototype[method]
   arrayInstrumentations[method] = function (...args) {
@@ -53,6 +54,15 @@ const arrayInstrumentations = {}
     if (res === false) {
       res = originMethod.apply(this.raw, args)
     }
+    return res
+  }
+})
+;['push', 'pop', 'shift', 'unshift', 'splice'].forEach(method => {
+  const originMethod = Array.prototype[method]
+  arrayInstrumentations[method] = function (...args) {
+    shouldTrack = false
+    let res = originMethod.apply(this, args)
+    shouldTrack = true
     return res
   }
 })
@@ -64,12 +74,12 @@ function createReactive (obj, isShallow = false, isReadonLy = false) {
         return target
       }
 
-      if (!isReadonLy && typeof key !== 'symbol') {
-        track(target, key)
-      }
-
       if (Array.isArray(target) && arrayInstrumentations.hasOwnProperty(key)) {
         return Reflect.get(arrayInstrumentations, key, receiver)
+      }
+
+      if (!isReadonLy && typeof key !== 'symbol') {
+        track(target, key)
       }
 
       const res = Reflect.get(target, key, receiver)
@@ -129,7 +139,7 @@ function createReactive (obj, isShallow = false, isReadonLy = false) {
 }
 
 const track = (target, key) => {
-  if (!activeEffect) return
+  if (!activeEffect || !shouldTrack) return
   let depsMap = bucket.get(target)
   if (!depsMap) {
     bucket.set(target, (depsMap = new Map()))
@@ -217,7 +227,53 @@ function shallowReadonly (obj) {
   return createReactive(obj, true, true)
 }
 
-const obj = {}
-const arr = reactive([obj])
+/*********************旧代码结束**********************/
 
-console.log(arr.includes(obj))
+function ref(val) {
+  const wrapper = { // ref 内部创建包裹对象
+    value: val
+  }
+
+  Object.defineProperty(wrapper, '__v_isRef', { // 定义一个不可枚举不可写的属性，用于和非原始值对象区分，以能够实现后续脱 ref
+    value: true
+  })
+
+  return reactive(wrapper)
+}
+
+const obj =  reactive({ foo: 1, bar: 2 })
+
+function toRef(obj, key) { // obj 是响应式数据
+  const wrapper = {
+    get value () {
+      return obj[key]
+    },
+    set value (val) {
+      obj[key] = val
+    }
+  }
+
+  Object.defineProperty(wrapper, '__v_isRef', {
+    value: true
+  })
+
+  return wrapper
+}
+
+function toRefs(obj) {
+  const ret = {}
+  for (const key in obj) {
+    ret[key] = toRef(obj, key)
+  }
+  return ret
+}
+
+const newObj = {
+  ...toRefs(obj)
+}
+
+effect(() => {
+  console.log(newObj.foo.value)
+})
+
+obj.foo = 100

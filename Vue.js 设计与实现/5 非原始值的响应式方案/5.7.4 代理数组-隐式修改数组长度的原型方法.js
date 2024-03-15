@@ -1,7 +1,8 @@
 /**
  * 5.7 代理数组
- * 5.7.3 数组的查找方法
- * 同样方法处理 indexOf 和 lastIndexOf
+ * 5.7.4 隐式修改数组长度的原型方法
+ * 数组的栈方法 push/pop/shift/unshift
+ * splice
  */
 
 const TriggerType = {
@@ -45,7 +46,7 @@ const ITERATE_KEY = Symbol()
 
 
 const arrayInstrumentations = {}
-
+let shouldTrack = true // 是否允许追踪
 ;['includes', 'indexOf', 'lastIndexOf'].forEach(method => {
   const originMethod = Array.prototype[method]
   arrayInstrumentations[method] = function (...args) {
@@ -53,6 +54,15 @@ const arrayInstrumentations = {}
     if (res === false) {
       res = originMethod.apply(this.raw, args)
     }
+    return res
+  }
+})
+;['push', 'pop', 'shift', 'unshift', 'splice'].forEach(method => {
+  const originMethod = Array.prototype[method]
+  arrayInstrumentations[method] = function (...args) {
+    shouldTrack = false // 调用原始方法前，禁止追踪
+    let res = originMethod.apply(this, args) // 调用原始方法
+    shouldTrack = true // 调用原始方法后，允许追踪
     return res
   }
 })
@@ -64,12 +74,12 @@ function createReactive (obj, isShallow = false, isReadonLy = false) {
         return target
       }
 
-      if (!isReadonLy && typeof key !== 'symbol') {
-        track(target, key)
-      }
-
       if (Array.isArray(target) && arrayInstrumentations.hasOwnProperty(key)) {
         return Reflect.get(arrayInstrumentations, key, receiver)
+      }
+
+      if (!isReadonLy && typeof key !== 'symbol') {
+        track(target, key)
       }
 
       const res = Reflect.get(target, key, receiver)
@@ -129,7 +139,8 @@ function createReactive (obj, isShallow = false, isReadonLy = false) {
 }
 
 const track = (target, key) => {
-  if (!activeEffect) return
+  console.log(target, key, shouldTrack)
+  if (!activeEffect || !shouldTrack) return // 禁止追踪，直接反回
   let depsMap = bucket.get(target)
   if (!depsMap) {
     bucket.set(target, (depsMap = new Map()))
@@ -217,7 +228,38 @@ function shallowReadonly (obj) {
   return createReactive(obj, true, true)
 }
 
-const obj = {}
-const arr = reactive([obj])
+// const arr = reactive([1])
 
-console.log(arr.includes(obj))
+// effect(() => {
+//   console.log(arr.length)
+// })
+
+// arr.push(2)
+
+const arr2 = reactive([])
+
+effect(() => {
+  console.log(`长度变化：${arr2.length}`)
+})
+
+effect(() => {
+  arr2.push(1)
+  console.log(arr2)
+})
+
+effect(() => {
+  arr2.push(2)
+  console.log(arr2)
+})
+
+/**
+ * [] length true
+长度变化：0
+[] length false
+[ 1 ] length false
+长度变化：1
+[ 1 ]
+[ 1 ] length false
+[ 1, 2 ]
+// 有问题，应该继续打印 长度变化：2
+ */

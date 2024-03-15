@@ -1,8 +1,9 @@
 /**
- * 5.7 代理数组
- * 5.7.3 数组的查找方法
- * 同样方法处理 indexOf 和 lastIndexOf
+ * 6.2 响应丢失问题
+ * 例如 ...展开运算符会导致响应式数据响应丢失
  */
+
+/*********************旧代码开始**********************/
 
 const TriggerType = {
   SET: 'SET',
@@ -45,7 +46,7 @@ const ITERATE_KEY = Symbol()
 
 
 const arrayInstrumentations = {}
-
+let shouldTrack = true
 ;['includes', 'indexOf', 'lastIndexOf'].forEach(method => {
   const originMethod = Array.prototype[method]
   arrayInstrumentations[method] = function (...args) {
@@ -53,6 +54,15 @@ const arrayInstrumentations = {}
     if (res === false) {
       res = originMethod.apply(this.raw, args)
     }
+    return res
+  }
+})
+;['push', 'pop', 'shift', 'unshift', 'splice'].forEach(method => {
+  const originMethod = Array.prototype[method]
+  arrayInstrumentations[method] = function (...args) {
+    shouldTrack = false
+    let res = originMethod.apply(this, args)
+    shouldTrack = true
     return res
   }
 })
@@ -64,12 +74,12 @@ function createReactive (obj, isShallow = false, isReadonLy = false) {
         return target
       }
 
-      if (!isReadonLy && typeof key !== 'symbol') {
-        track(target, key)
-      }
-
       if (Array.isArray(target) && arrayInstrumentations.hasOwnProperty(key)) {
         return Reflect.get(arrayInstrumentations, key, receiver)
+      }
+
+      if (!isReadonLy && typeof key !== 'symbol') {
+        track(target, key)
       }
 
       const res = Reflect.get(target, key, receiver)
@@ -129,7 +139,7 @@ function createReactive (obj, isShallow = false, isReadonLy = false) {
 }
 
 const track = (target, key) => {
-  if (!activeEffect) return
+  if (!activeEffect || !shouldTrack) return
   let depsMap = bucket.get(target)
   if (!depsMap) {
     bucket.set(target, (depsMap = new Map()))
@@ -217,7 +227,27 @@ function shallowReadonly (obj) {
   return createReactive(obj, true, true)
 }
 
-const obj = {}
-const arr = reactive([obj])
+/*********************旧代码结束**********************/
 
-console.log(arr.includes(obj))
+const obj =  reactive({ foo: 1, bar: 2 })
+
+// const newObj = { ...obj }
+const newObj = {
+  foo: {
+    get value () {
+      return obj.foo
+    }
+  },
+  bar: {
+    get value () {
+      return obj.bar
+    }
+  }
+}
+
+effect(() => {
+  // console.log(newObj.foo)
+  console.log(newObj.foo.value) // 读取的 obj.foo，会绑定此 effectFn
+})
+
+obj.foo = 100
