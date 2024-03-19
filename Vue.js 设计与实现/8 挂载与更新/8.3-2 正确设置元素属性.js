@@ -43,7 +43,7 @@ function createRenderer(options) {
       for (const key in vnode.props) {
         const value = vnode.props[key]
         if (shouldSetAsProps(el, key)) {
-          const type = typeof el[type]
+          const type = typeof el[key]
           if (type === 'boolean' && value === '') {
             el[key] = true
           } else {

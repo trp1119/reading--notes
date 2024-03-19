@@ -1,33 +1,46 @@
 /**
- * 8.3 正确设置元素属性
- * 设置属性有两种方式 el.setAttribute(attr, value) 与 el.attr = value
- * setAttribute 总是设置 value 为字符串，如 false 为 'false'，导致为 true
- * el.attr = false 没为题，但 value 为空则设置为 false, 如 disabled: '', 本意是true， el.disabled = '' = false，禁用变启用了。
- * el.setArrtibute 与 el。attr 并不能总是一一对应
+ * 8.5 卸载操作
+ * 将卸载操作封装到 unmount 中
  */
 
 const vnode = {
   type: 'div',
   props: {
-    id: 'foo'
+    id: 'foo',
+    class: [
+      'foo bar',
+      { biz: true }
+    ]
   },
   children: [
     {
       type: 'p',
       children: 'hello'
     }
-  ]
+  ],
+}
+
+function normalizeClass (c) {
+  // TODO
+  return c
+}
+
+function shouldSetAsProps  (el, key) {
+  if (key === 'form' && el.tagName === 'INPUT') return false
+  return key in el
 }
 
 function createRenderer(options) {
   const {
     createElement,
     insert,
-    setElementText
+    setElementText,
+    patchProps,
+    unmount
   } = options
 
   function mountElement(vnode, container) {
-    const el = createElement(vnode.type)
+    const el = vnode.el = createElement(vnode.type) // vnode 引用 真实 DOM el
 
     if (typeof vnode.children === 'string') {
       setElementText(el, vnode.children)
@@ -39,17 +52,7 @@ function createRenderer(options) {
 
     if (vnode.props) {
       for (const key in vnode.props) {
-        const value = vnode.props[key]
-        if (key in el) { // 判断属性是否存在于 DOM Properties
-          const type = typeof el[key]
-          if (type === 'boolean' && value === '') { // 如果是 boolean 类型并且设置为空，则纠正为 true
-            el[key] = true
-          } else {
-            el[key] = value
-          }
-        } else { // 不存在于 DOM Properties，则设置 HTML Attribute
-          el.setAttribute(key, value)
-        }
+        patchProps(el, key, null, vnode.props[key])
       }
     }
 
@@ -68,8 +71,8 @@ function createRenderer(options) {
     if (vnode) {
       patch(container._vnode, vnode, container)
     } else {
-      if (container._vnode) {
-        container.innerHTML = ''
+      if (container._vnode) { // 旧 node
+        unmount(container._vnode)
       }
     }
     container._vnode = vnode
@@ -80,7 +83,6 @@ function createRenderer(options) {
   }
 }
 
-// 创建渲染器
 const renderer = createRenderer({
   createElement (tag) {
     return document.createElement(tag)
@@ -90,6 +92,27 @@ const renderer = createRenderer({
   },
   insert (el, parent, anchor = null) {
     parent.insertBefore(el, anchor)
+  },
+  patchProps (el, key, preValue, nextValue) {
+    if (key === 'class') {
+      el.className = normalizeClass(nextValue) || ''
+    } else if (shouldSetAsProps(el, key)) {
+      const type = typeof el[key]
+      if (type === 'boolean' && nextValue === '') {
+        el[key] = true
+      } else {
+        el[key] = nextValue
+      }
+    } else {
+      el.setAttribute(key, nextValue)
+    }
+  },
+  unmount (vnode) {
+    const el = vnode.el
+    const parent = el.parentNode
+    if (parent) {
+      parent.removeChild(el)
+    }
   }
 })
 

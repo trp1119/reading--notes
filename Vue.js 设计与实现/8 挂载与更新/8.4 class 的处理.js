@@ -96,7 +96,7 @@ const renderer = createRenderer({
     if (key === 'class') {
       el.className = normalizeClass(nextValue) || ''
     } else if (shouldSetAsProps(el, key)) {
-      const type = typeof el[type]
+      const type = typeof el[key]
       if (type === 'boolean' && nextValue === '') {
         el[key] = true
       } else {

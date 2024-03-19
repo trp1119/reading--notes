@@ -1,19 +1,32 @@
 /**
- * 8.3 正确设置元素属性
- * 抽离设置属性操作到 renderer options
+ * 8.8 事件冒泡与更新时机问题
  */
 
 const vnode = {
   type: 'div',
   props: {
-    id: 'foo'
+    id: 'foo',
+    class: 'foo bar',
+    onClick: [
+      () => {
+        console.log('click1')
+      },
+      () => {
+        console.log('click2')
+      }
+    ]
   },
   children: [
     {
       type: 'p',
       children: 'hello'
     }
-  ]
+  ],
+}
+
+function normalizeClass (c) {
+  // TODO
+  return c
 }
 
 function shouldSetAsProps  (el, key) {
@@ -26,11 +39,12 @@ function createRenderer(options) {
     createElement,
     insert,
     setElementText,
-    patchProps
+    patchProps,
+    unmount
   } = options
 
   function mountElement(vnode, container) {
-    const el = createElement(vnode.type)
+    const el = vnode.el = createElement(vnode.type)
 
     if (typeof vnode.children === 'string') {
       setElementText(el, vnode.children)
@@ -50,10 +64,21 @@ function createRenderer(options) {
   }
 
   function patch (n1, n2, container) {
-    if (!n1) {
-      mountElement(n2, container)
-    } else {
-
+    if (n1 && n1.type !== n2.type) {
+      unmount(n1)
+      n1 = null
+    }
+    const { type } = n2
+    if (typeof type === 'string') {
+      if (!n1) {
+        mountElement(n2, container)
+      } else {
+  
+      }
+    } else if (typeof type === 'object') {
+      // 组件
+    } else if (type === 'xxx') {
+      // 其他
     }
   }
 
@@ -62,7 +87,7 @@ function createRenderer(options) {
       patch(container._vnode, vnode, container)
     } else {
       if (container._vnode) {
-        container.innerHTML = ''
+        unmount(container._vnode)
       }
     }
     container._vnode = vnode
@@ -84,7 +109,31 @@ const renderer = createRenderer({
     parent.insertBefore(el, anchor)
   },
   patchProps (el, key, preValue, nextValue) {
-    if (shouldSetAsProps(el, key)) {
+    if (/^on/.test(key)) {
+      const name = key.slice(2).toLowerCase()
+
+      const invokers = el._vei || (el._vei = {})
+      let invoker = invokers[key]
+      if (nextValue) {
+        if (!invoker) {
+          invoker = el._vei[key] = (e) => {
+            if (Array.isArray(invoker.value)) {
+              invoker.value.forEach(fn => fn(e))
+            } else {
+              invoker.value(e)
+            }
+          }
+          invoker.value = nextValue
+          el.addEventListener(name, invoker)
+        } else {
+          invoker.value = nextValue
+        }
+      } else if (invoker) {
+        el.removeEventListener(name, invoker)
+      }
+    } else if (key === 'class') {
+      el.className = normalizeClass(nextValue) || ''
+    } else if (shouldSetAsProps(el, key)) {
       const type = typeof el[key]
       if (type === 'boolean' && nextValue === '') {
         el[key] = true
@@ -93,6 +142,13 @@ const renderer = createRenderer({
       }
     } else {
       el.setAttribute(key, nextValue)
+    }
+  },
+  unmount (vnode) {
+    const el = vnode.el
+    const parent = el.parentNode
+    if (parent) {
+      parent.removeChild(el)
     }
   }
 })

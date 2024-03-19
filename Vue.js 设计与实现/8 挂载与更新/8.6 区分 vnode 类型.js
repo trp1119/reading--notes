@@ -1,19 +1,27 @@
 /**
- * 8.3 正确设置元素属性
- * 抽离设置属性操作到 renderer options
+ * 8.6 区分 vnode 类型
  */
 
 const vnode = {
   type: 'div',
   props: {
-    id: 'foo'
+    id: 'foo',
+    class: [
+      'foo bar',
+      { biz: true }
+    ]
   },
   children: [
     {
       type: 'p',
       children: 'hello'
     }
-  ]
+  ],
+}
+
+function normalizeClass (c) {
+  // TODO
+  return c
 }
 
 function shouldSetAsProps  (el, key) {
@@ -26,11 +34,12 @@ function createRenderer(options) {
     createElement,
     insert,
     setElementText,
-    patchProps
+    patchProps,
+    unmount
   } = options
 
   function mountElement(vnode, container) {
-    const el = createElement(vnode.type)
+    const el = vnode.el = createElement(vnode.type)
 
     if (typeof vnode.children === 'string') {
       setElementText(el, vnode.children)
@@ -49,11 +58,24 @@ function createRenderer(options) {
     insert(el, container)
   }
 
-  function patch (n1, n2, container) {
-    if (!n1) {
-      mountElement(n2, container)
-    } else {
-
+  function patch (n1, n2, container) { // n1 旧vnode n2 新vnode
+    // 旧 vnode 存在，对比 n1 n2
+    if (n1 && n1.type !== n2.type) { // 类型不同，直接卸载旧 vnode
+      unmount(n1)
+      n1 = null // 置为 null，保证下方重新挂载
+    }
+    const { type } = n2
+    // 区分不同类型的 vnode 普通标签、组件、Fragment 等
+    if (typeof type === 'string') {
+      if (!n1) {
+        mountElement(n2, container) // 重新挂载
+      } else {
+  
+      }
+    } else if (typeof type === 'object') {
+      // 组件
+    } else if (type === 'xxx') {
+      // 其他
     }
   }
 
@@ -62,7 +84,7 @@ function createRenderer(options) {
       patch(container._vnode, vnode, container)
     } else {
       if (container._vnode) {
-        container.innerHTML = ''
+        unmount(container._vnode)
       }
     }
     container._vnode = vnode
@@ -84,7 +106,9 @@ const renderer = createRenderer({
     parent.insertBefore(el, anchor)
   },
   patchProps (el, key, preValue, nextValue) {
-    if (shouldSetAsProps(el, key)) {
+    if (key === 'class') {
+      el.className = normalizeClass(nextValue) || ''
+    } else if (shouldSetAsProps(el, key)) {
       const type = typeof el[key]
       if (type === 'boolean' && nextValue === '') {
         el[key] = true
@@ -93,6 +117,13 @@ const renderer = createRenderer({
       }
     } else {
       el.setAttribute(key, nextValue)
+    }
+  },
+  unmount (vnode) {
+    const el = vnode.el
+    const parent = el.parentNode
+    if (parent) {
+      parent.removeChild(el)
     }
   }
 })
