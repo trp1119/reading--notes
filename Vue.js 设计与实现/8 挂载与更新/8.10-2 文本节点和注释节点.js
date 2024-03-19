@@ -1,11 +1,19 @@
 /**
- * 8.8 事件冒泡与更新时机问题
- * 更新时机早于冒泡，导致更改父元素属性后冒牌才执行到，行为错误
+ * 8.10 文本节点和注释节点
+ * 提取封装
  */
 
-const { effect, ref } = VueReactivity
+const Text = Symbol()
+const vnode_text = {
+  type: Text,
+  children: '文本内容'
+}
 
-const bol = ref(false)
+const Comment = Symbol()
+const vnode_comment = {
+  type: Comment,
+  children: '注释内容'
+}
 
 function normalizeClass (c) {
   // TODO
@@ -23,7 +31,9 @@ function createRenderer(options) {
     insert,
     setElementText,
     patchProps,
-    unmount
+    unmount,
+    createText,
+    setText
   } = options
 
   function mountElement(vnode, container) {
@@ -107,6 +117,17 @@ function createRenderer(options) {
         // 更新
         patchElement(n1, n2)
       }
+    } else if (type === Text) { // 文本节点
+      if (!n1) {
+        const el = n2.el = createText(n2.children)
+        insert(el, container)
+      } else {
+        const el = n2.el = n1.el
+        if (n2.children !== n1.children) {
+          setText(el, n2.children)
+        }
+      }
+
     } else if (typeof type === 'object') {
       // 组件
     } else if (type === 'xxx') {
@@ -139,6 +160,12 @@ const renderer = createRenderer({
   },
   insert (el, parent, anchor = null) {
     parent.insertBefore(el, anchor)
+  },
+  createText(text) {
+    return document.createTextNode(text)
+  },
+  setText(el, text) {
+    el.nodeValue = text
   },
   patchProps (el, key, preValue, nextValue) {
     if (/^on/.test(key)) {
@@ -190,26 +217,5 @@ const renderer = createRenderer({
   }
 })
 
-effect(() => {
-  const vnode = {
-    type: 'div',
-    props: bol.value ? {
-      onClick: () => {
-        console.log('点击父元素')
-      }
-    } : {},
-    children: [
-      {
-        type: 'p',
-        props: {
-          onClick: () => {
-            bol.value = !bol.value // 有 bug
-            console.log(`点击子元素，bol 变为 ${bol.value}`)
-          }
-        },
-        children: 'text'
-      }
-    ]
-  }
-  renderer.render(vnode, document.querySelector('#app'))
-})
+// 创建注释
+// document.createComment()

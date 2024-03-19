@@ -71,7 +71,7 @@ function createRenderer(options) {
       if (!n1) {
         mountElement(n2, container) // 重新挂载
       } else {
-  
+        // 更新
       }
     } else if (typeof type === 'object') {
       // 组件
